@@ -5,7 +5,7 @@ import pickle
 class Index:
     def __init__(self, name):
         self.name = name
-        self.msgs = [];
+        self.msgs = []
         self.index = {}
         self.total_msgs = 0
         self.total_words = 0
@@ -47,16 +47,27 @@ class Index:
 class PIndex(Index):
     def __init__(self, name):
         super().__init__(name)
-        roman_int_f = open('roman.txt.pk', 'rb')
-        self.int2roman = pickle.load(roman_int_f)
-        roman_int_f.close()
+        try:
+            with open('roman.txt.pk', 'rb') as roman_int_f:
+                self.int2roman = pickle.load(roman_int_f)
+        except FileNotFoundError:
+            print("ERROR: roman.txt.pk not found. Please ensure it's in the correct location.")
+            raise
+        except pickle.PickleError as e:
+            print(f"ERROR: Could not load Roman numeral mapping from roman.txt.pk: {e}")
+            raise
         self.load_poems()
         
-        # load poems
     def load_poems(self):
-        lines = open(self.name, 'r').readlines()
-        for l in lines:
-            self.add_msg_and_index(l.rstrip())
+        try:
+            with open(self.name, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            for l in lines:
+                self.add_msg_and_index(l.rstrip())
+        except FileNotFoundError:
+            print(f"ERROR: Poem file '{self.name}' not found.")
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred while loading poems from '{self.name}': {e}")
     
     def get_poem(self, p):
         p_str = self.int2roman[p] + '.'
@@ -88,12 +99,4 @@ class PIndex(Index):
             if this_line.strip():
                 poem.append(this_line.lstrip())
             go_line += 1
-        # poem = "\n".join(poem)
         return poem
-    
-if __name__ == "__main__":
-    sonnets = PIndex("AllSonnets.txt")
-    p3 = sonnets.get_poem(3)
-    print(p3)
-    s_love = sonnets.search("love")
-    print(s_love)

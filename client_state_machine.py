@@ -45,28 +45,26 @@ class ClientSM:
         
 
     def proc(self, my_msg, peer_msg):
-        self.out_msg = ''
-        # print(f"[ClientSM DEBUG] proc called. State: {self.state}, my_msg: '{my_msg}', peer_msg: '{peer_msg}'")
+        """
+        Processes incoming messages from the server and local user commands.
+        Updates the client's state and prepares output messages for the GUI.
+        """
+        self.out_msg = '' # Reset output message buffer.
 
-        processed_my_msg_as_command = False # Flag to indicate if my_msg was a command
+        processed_my_msg_as_command = False # Flag to track if my_msg was a command.
         
+        # Process messages received from the server (peer_msg).
         if len(peer_msg) > 0:
-                peer_msg = json.loads(peer_msg)
-                if peer_msg["action"] == "open_ttt":
+                peer_msg = json.loads(peer_msg) # Parse JSON message from server.
+                if peer_msg["action"] == "open_ttt": # Server initiated Tic-Tac-Toe game.
                     self.symbol = peer_msg["symbol"]
                     self.out_msg += f"Received Tic Tac Toe request from {peer_msg['from']}.\n"
-                    self.out_msg += f"OPEN_TTT: {peer_msg.get("from")}\n "
-                    self.out_msg += "opponent turn "+ self.symbol
-                    print("received request and state machine on my side gets open ttt and modified out_msg")
-                elif peer_msg["action"]=="update" and peer_msg["status"]=="your turn": # For opponent's move
-                    print("ClientSM: recognized peer_msg for opponent's move update", peer_msg)
-                    self.out_msg += "myturn "+ peer_msg["from"]+" "+ peer_msg["row"] +" "+ peer_msg["column"]
-                    print("ClientSM: peer_msg (opponent's move) - out_msg converted. Here:", self.out_msg)
-                    # This return might prevent further processing of my_msg if both are present,
-                    # but typically for TTT, only one player acts or receives an update at a time.
-                    # return self.out_msg # Let's allow my_msg to be processed too if it exists.
-                elif peer_msg["action"] == "end": # Game ended by other player's move or server event
-                    print("ClientSM: recognized peer_msg for game end", peer_msg)
+                    self.out_msg += f"OPEN_TTT: {peer_msg.get("from")}\n " # Signal GUI to open TTT window.
+                    self.out_msg += "opponent turn "+ self.symbol # Initial turn status.
+                elif peer_msg["action"]=="update" and peer_msg["status"]=="your turn": # Opponent made a move, now it's my turn.
+                    self.out_msg += "myturn "+ peer_msg["from"]+" "+ peer_msg["row"] +" "+ peer_msg["column"] # Signal GUI about opponent's move.
+                    # Note: Original comment about return was here, removed as it's not returning.
+                elif peer_msg["action"] == "end": # Tic-Tac-Toe game ended.
                     status = peer_msg.get("status")
                     winner_name = peer_msg.get("winner")
                     final_board = peer_msg.get("board", [["","",""],["","",""],["","",""]])
@@ -80,67 +78,56 @@ class ClientSM:
             # These commands are available if logged in or chatting
             if self.state == S_LOGGEDIN or self.state == S_CHATTING:
                 move_lst= my_msg.split()
-                if move_lst[0]=="move" and len(move_lst) >= 5: # Check length for safety
+                if move_lst[0]=="move" and len(move_lst) >= 5: # User made a Tic-Tac-Toe move.
                     row= move_lst[1]
                     column= move_lst[2]
-                    # move_lst[3] is the literal string "from"
-                    actual_symbol = move_lst[4] # This is the "X" or "O"
+                    # move_lst[3] is the literal string "from", move_lst[4] is the symbol ("X" or "O").
+                    actual_symbol = move_lst[4]
                     
-                    print(f"ClientSM: received move {row},{column} from GUI. Symbol being sent as 'from': {actual_symbol}")
-                    # The server's 'move' handler in soph test/chat_server.py uses msg["from"] for the symbol.
-                    # The "target" field in the original message was actually carrying the symbol,
-                    # and the server doesn't use a "target" field for the "move" action.
+                    # Server expects the player's symbol in the "from" field for a "move" action.
                     mysend(self.s, json.dumps({"action": "move", "row": row, "column": column, "from": actual_symbol}))
-                    response = json.loads(myrecv(self.s)) # This client expects a synchronous response for a move
-                    print("ClientSM: got response from server after move:", response)
+                    response = json.loads(myrecv(self.s)) # Expect a response from the server after the move.
                     if response["status"] == "opponent turn":
                         self.out_msg += "\n oppo nent turn "+ response.get("turn")
-                        print("i moved, now opponent")
-                    elif response["status"] == "your turn":
+                    elif response["status"] == "your turn": # This case might occur if server logic changes.
                         self.out_msg += "\n your turn "+ response.get("turn")
-                        print("opponent moved, now me")
-                    elif response["status"] == "win":
+                    elif response["status"] == "win": # Game ended with a win.
                         winner_name = response.get("winner", "Unknown")
                         final_board = response.get("board", [["","",""],["","",""],["","",""]])
                         self.out_msg += f"\nGAME_OVER_UPDATE:{json.dumps({'winner': winner_name, 'status': 'win', 'board': final_board})}"
-                    elif response["status"] == "tie": # Handle TIE response
+                    elif response["status"] == "tie": # Game ended with a tie.
                         final_board = response.get("board", [["","",""],["","",""],["","",""]])
                         self.out_msg += f"\nGAME_OVER_UPDATE:{json.dumps({'winner': None, 'status': 'tie', 'board': final_board})}"
                     
-                    else:
+                    else: # Unexpected response status.
+                        pass # Or handle unexpected status.
+                    # Note: Original commented-out state change was here.
                         
-                        print("What the server says? Status:", response.get("status"))
-                    # self.state=S_LOGGEDIN # State should be managed more carefully
-                        
-                elif my_msg == 'q':
+                elif my_msg == 'q': # Quit command.
                     self.out_msg += 'See you next time!\n'
                     self.state = S_OFFLINE
                     processed_my_msg_as_command = True
-                elif my_msg == 'time':
+                elif my_msg == 'time': # Time command.
                     mysend(self.s, json.dumps({"action":"time"}))
                     time_in = json.loads(myrecv(self.s))["results"]
                     self.out_msg += f"Current Time: {time_in}\n"
                     processed_my_msg_as_command = True
-                elif my_msg == 'who':
-                    print("[ClientSM] 'who' command received. Sending 'list' action to server.")
+                elif my_msg == 'who': # Who command (list online users).
                     mysend(self.s, json.dumps({"action":"list"}))
-                    print("[ClientSM] Waiting for server response for 'list'...")
                     response_json_str = myrecv(self.s)
-                    print(f"[ClientSM] Received server response for 'list': {response_json_str}")
                     if response_json_str:
                         try:
                             response_data = json.loads(response_json_str)
                             user_list_structured = response_data["results"]
+                            # Prefix with "USER_LIST_STRUCT:" for GUI to handle popup.
                             self.out_msg = "USER_LIST_STRUCT:" + json.dumps(user_list_structured)
-                            print(f"[ClientSM] Set out_msg to: {self.out_msg}")
                         except (json.JSONDecodeError, KeyError) as e:
                             self.out_msg = "SYSTEM: Error parsing user list from server.\n"
-                            print(f"[ClientSM] Error parsing 'list' response: {e}")
                     else:
                         self.out_msg = "SYSTEM: No response from server for user list.\n"
                     processed_my_msg_as_command = True
                     
-                #ttt
+                # Tic-Tac-Toe start command.
                 elif my_msg.startswith("ttt"):
                     target_player = my_msg[3:].strip()
                     if target_player:
@@ -148,13 +135,12 @@ class ClientSM:
                         response = json.loads(myrecv(self.s))
                         if response.get("status") == "ok":
                             self.out_msg += f"Tic Tac Toe request sent to {target_player}.\n"
-                            if response["action"] == "open_ttt":
-                                self.symbol= response.get("symbol", "X")
+                            if response["action"] == "open_ttt": # Server confirms game start.
+                                self.symbol= response.get("symbol", "X") # Get assigned symbol.
                                 self.out_msg += f"Request approved. Game on!\n"
-                                self.out_msg += f"OPEN_TTT: {response.get("from")} "
+                                self.out_msg += f"OPEN_TTT: {response.get("from")} " # Signal GUI.
                                 self.out_msg += self.symbol
-                                print("i request to play and state machine on my side gets open ttt and modified out_msg")
-                        else:
+                        else: # Server could not start TTT.
                             self.out_msg += f"Could not start TTT with {target_player}: {response.get('reason', 'Unknown error')}\n"
                     else:
                         self.out_msg += "Invalid TTT command format. Use: ttt <username>\n"
@@ -209,31 +195,30 @@ class ClientSM:
                     else:
                          self.out_msg += "Invalid poem command. Use 'p <number>'.\n"
                     processed_my_msg_as_command = True
-                # 'c' (connect) command is typically S_LOGGEDIN only, to establish a chat session.
-                # If already S_CHATTING, 'c' might mean something else or be disallowed.
-                # For now, let's keep 'c' specific to S_LOGGEDIN if it's to change state.
-                # If it's a general command that doesn't change state, it could be here.
+                # The 'c' (connect) command is handled in the S_LOGGEDIN state block below.
 
-        # State-specific handling
+        # State-specific handling for messages and commands.
         if self.state == S_LOGGEDIN:
+            # Handle commands specific to the S_LOGGEDIN state (e.g., 'connect').
             if len(my_msg) > 0 and not processed_my_msg_as_command:
-                # S_LOGGEDIN specific 'my_msg' handling (e.g. connect command)
-                if my_msg[0] == 'c':
+                if my_msg[0] == 'c': # Connect to another user.
                     peer = my_msg[1:].strip()
                     if self.connect_to(peer):
-                        self.state = S_CHATTING # Transition state
+                        self.state = S_CHATTING # Transition to chatting state.
                         self.out_msg += 'Connect to ' + peer + '. Chat away!\n\n'
                         self.out_msg += '-----------------------------------\n'
                     else:
                         self.out_msg += 'Connection unsuccessful\n'
-                    processed_my_msg_as_command = True # Mark as processed
-                # else:
-                    # If my_msg was not a universal command and not 'c', what to do in S_LOGGEDIN?
-                    # self.out_msg += "Unknown command in S_LOGGEDIN state.\n" # Or ignore
+                    processed_my_msg_as_command = True
+                # Original commented-out 'else' block for unknown S_LOGGEDIN commands removed.
 
-            if len(peer_msg) > 0:
-                peer_msg = json.loads(myrecv(self.s))
-                if peer_msg["action"] == "connect":
+            # Handle incoming server messages when in S_LOGGEDIN state.
+            if len(peer_msg) > 0: # This assumes peer_msg was already parsed if it existed.
+                # peer_msg = json.loads(myrecv(self.s)) # This line is problematic, peer_msg is already parsed or empty.
+                                                        # If peer_msg was empty, this would block.
+                                                        # If peer_msg was not empty, it's already a dict.
+                                                        # This logic needs to rely on the peer_msg dict from the top of proc.
+                if peer_msg["action"] == "connect": # Server confirms a connection initiated by another user.
                     self.peer = peer_msg["from"]
                     self.out_msg += 'Request from ' + self.peer + '\n'
                     self.out_msg += 'You are connected with ' + self.peer

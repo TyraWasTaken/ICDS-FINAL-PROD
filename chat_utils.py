@@ -1,10 +1,8 @@
 import socket
 import time
 
-# use local loop back address by default
-#CHAT_IP = '127.0.0.1'
-# CHAT_IP = socket.gethostbyname(socket.gethostname())
-CHAT_IP = '127.0.0.1'  # use localhost
+# Default IP address for the chat server.
+CHAT_IP = '127.0.0.1'  # Using localhost.
 
 CHAT_PORT = 1112
 SERVER = (CHAT_IP, CHAT_PORT)
@@ -36,7 +34,7 @@ def print_state(state):
         print('Error: wrong state')
 
 def mysend(s, msg):
-    #append size to message and send it
+    # Prepend message with its size, formatted to SIZE_SPEC digits.
     msg = ('0' * SIZE_SPEC + str(len(msg)))[-SIZE_SPEC:] + str(msg)
     msg = msg.encode()
     total_sent = 0
@@ -48,7 +46,7 @@ def mysend(s, msg):
         total_sent += sent
 
 def myrecv(s):
-    #receive size first
+    # First, receive the size of the incoming message.
     size = ''
     while len(size) < SIZE_SPEC:
         text = s.recv(SIZE_SPEC - len(size)).decode()
@@ -57,17 +55,17 @@ def myrecv(s):
             return('')
         size += text
     size = int(size)
-    #now receive message
+    # Then, receive the actual message content based on the determined size.
     msg = ''
     while len(msg) < size:
         text = s.recv(size-len(msg)).decode()
-        if text == b'':
+        if text == b'': # Check for empty byte string indicating disconnection.
             print('disconnected')
             break
         msg += text
-    #print ('received '+message)
     return (msg)
 
 def text_proc(text, user):
+    # Formats a chat message with a timestamp and username.
     ctime = time.strftime('%I:%M %p', time.localtime())
-    return(f'[{ctime}] {user}: {text}')  # Changed to a cleaner format
+    return(f'[{ctime}] {user}: {text}')
