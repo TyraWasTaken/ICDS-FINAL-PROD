@@ -70,8 +70,16 @@ class PIndex(Index):
             print(f"ERROR: An unexpected error occurred while loading poems from '{self.name}': {e}")
     
     def get_poem(self, p):
+        # Check if the requested sonnet number is valid
+        if p not in self.int2roman:
+            return []
+
         p_str = self.int2roman[p] + '.'
-        p_next_str = self.int2roman[p + 1] + '.'
+        
+        # Determine the marker for the next sonnet, if it exists
+        p_next_str = None
+        if (p + 1) in self.int2roman:
+            p_next_str = self.int2roman[p + 1] + '.'
         temp = self.search(p_str)
         if temp:
             [(go_line, m)] = temp
@@ -93,7 +101,8 @@ class PIndex(Index):
         while go_line < end:
             this_line = self.get_msg(go_line)
             # Stop if we hit the marker for the next sonnet
-            if this_line == p_next_str:
+            # Stop if we hit the marker for the next sonnet (and p_next_str is defined)
+            if p_next_str is not None and this_line == p_next_str:
                 break
             # Add non-blank lines, stripping leading spaces
             if this_line.strip():
